@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>US Market Movers Dashboard</title>
+  <title>US Market Movers & Strategy Scanner</title>
   <style>
     :root {
       --bg-dark: #0f172a;
@@ -12,6 +12,7 @@
       --green: #4ade80;
       --red: #f87171;
       --accent: #38bdf8;
+      --yellow: #facc15;
     }
 
     body {
@@ -27,7 +28,6 @@
       margin-bottom: 25px;
     }
 
-    /* Tab navigation */
     .tabs {
       display: flex;
       justify-content: center;
@@ -47,28 +47,12 @@
       transition: all 0.2s ease;
     }
 
-    .tab-btn:hover {
-      border-color: var(--accent);
-    }
+    .tab-btn:hover { border-color: var(--accent); }
+    .tab-btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
 
-    .tab-btn.active {
-      background: var(--accent);
-      color: #000;
-      border-color: var(--accent);
-    }
+    .tab-content { display: none; max-width: 1200px; margin: 0 auto; }
+    .tab-content.active { display: block; }
 
-    /* Content view toggling */
-    .tab-content {
-      display: none;
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-
-    .tab-content.active {
-      display: block;
-    }
-
-    /* API Input Controls */
     .key-bar {
       background: var(--card-bg);
       padding: 12px 20px;
@@ -98,7 +82,6 @@
       font-weight: bold;
     }
 
-    /* Table Grid Styling */
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -119,39 +102,74 @@
       border-bottom: 1px solid #334155;
     }
 
-    th {
-      background: #182232;
-    }
+    th { background: #182232; }
 
     .green { color: var(--green); }
     .red { color: var(--red); }
+    .yellow { color: var(--yellow); }
     
-    /* Widget Wrapper */
     .widget-box {
       height: 650px;
       background: var(--card-bg);
       border-radius: 8px;
       overflow: hidden;
     }
+
+    .strategy-rules {
+      background: #182232;
+      border-left: 4px solid var(--accent);
+      padding: 12px;
+      margin-bottom: 15px;
+      font-size: 0.85rem;
+    }
   </style>
 </head>
 <body>
 
   <header>
-    <h1>📈 US Market Top Gainers & Losers</h1>
-    <p>Compare market movers using four different data implementations</p>
+    <h1>📈 US Market Movers & Strategy Scanner</h1>
+    <p>Live Market Data + Custom Reversion Scanner</p>
   </header>
 
   <!-- Navigation Tabs -->
   <div class="tabs">
-    <button class="tab-btn active" onclick="switchTab('tradingview')">1. TradingView Widget</button>
-    <button class="tab-btn" onclick="switchTab('fmp')">2. Financial Modeling Prep (FMP)</button>
-    <button class="tab-btn" onclick="switchTab('alphavantage')">3. Alpha Vantage API</button>
-    <button class="tab-btn" onclick="switchTab('polygon')">4. Polygon.io Snapshot</button>
+    <button class="tab-btn active" onclick="switchTab(event, 'strategy')">⚡ Strategy Signals Scanner</button>
+    <button class="tab-btn" onclick="switchTab(event, 'tradingview')">1. TradingView Widget</button>
+    <button class="tab-btn" onclick="switchTab(event, 'fmp')">2. Financial Modeling Prep</button>
+    <button class="tab-btn" onclick="switchTab(event, 'alphavantage')">3. Alpha Vantage</button>
+    <button class="tab-btn" onclick="switchTab(event, 'polygon')">4. Polygon Snapshot</button>
   </div>
 
-  <!-- 1. TRADINGVIEW EMBED WIDGET -->
-  <div id="tradingview" class="tab-content active">
+  <!-- TAB 0: CUSTOM STRATEGY SCANNER -->
+  <div id="strategy" class="tab-content active">
+    <div class="strategy-rules">
+      <strong>🎯 Execution Logic:</strong><br>
+      • <strong>Buy Entry:</strong> Intraday drop $\ge 15\%$ AND bounces $\ge 7\%$ off Low $\rightarrow$ <em>BUY Near Close / After-Market</em><br>
+      • <strong>Short Entry:</strong> Intraday gain $\ge 15\%$ AND pulls back $\ge 7\%$ off High $\rightarrow$ <em>SHORT Near Close / After-Market</em>
+    </div>
+    <div class="key-bar">
+      <label for="strat-key">Polygon API Key:</label>
+      <input type="text" id="strat-key" placeholder="Enter Polygon Key for Strategy Engine">
+      <button onclick="runStrategyEngine()">Run Strategy Scanner</button>
+    </div>
+    <div class="grid">
+      <div>
+        <h3 class="green">🟢 Buy Signals (Loser Rebound)</h3>
+        <table id="strat-buys">
+          <tr><th>Ticker</th><th>Price</th><th>Low</th><th>Bounce</th><th>Action</th></tr>
+        </table>
+      </div>
+      <div>
+        <h3 class="red">🔴 Short Signals (Gainer Pullback)</h3>
+        <table id="strat-shorts">
+          <tr><th>Ticker</th><th>Price</th><th>High</th><th>Pullback</th><th>Action</th></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 1: TRADINGVIEW WIDGET -->
+  <div id="tradingview" class="tab-content">
     <div class="widget-box">
       <div class="tradingview-widget-container">
         <div class="tradingview-widget-container__widget"></div>
@@ -162,7 +180,6 @@
           "exchange": "US",
           "showChart": true,
           "locale": "en",
-          "largeChartUrl": "",
           "isTransparent": false,
           "showSymbolLogo": true,
           "width": "100%",
@@ -173,11 +190,11 @@
     </div>
   </div>
 
-  <!-- 2. FINANCIAL MODELING PREP (FMP) -->
+  <!-- TAB 2: FINANCIAL MODELING PREP -->
   <div id="fmp" class="tab-content">
     <div class="key-bar">
       <label for="fmp-key">FMP API Key:</label>
-      <input type="text" id="fmp-key" placeholder="Enter FMP Key (demo works for limited tickers)" value="demo">
+      <input type="text" id="fmp-key" placeholder="Enter FMP Key" value="demo">
       <button onclick="loadFMP()">Fetch Data</button>
     </div>
     <div class="grid">
@@ -192,11 +209,11 @@
     </div>
   </div>
 
-  <!-- 3. ALPHA VANTAGE -->
+  <!-- TAB 3: ALPHA VANTAGE -->
   <div id="alphavantage" class="tab-content">
     <div class="key-bar">
       <label for="av-key">Alpha Vantage Key:</label>
-      <input type="text" id="av-key" placeholder="Enter Alpha Vantage API Key" value="demo">
+      <input type="text" id="av-key" placeholder="Enter Alpha Vantage Key" value="demo">
       <button onclick="loadAlphaVantage()">Fetch Data</button>
     </div>
     <div class="grid">
@@ -211,11 +228,11 @@
     </div>
   </div>
 
-  <!-- 4. POLYGON.IO SNAPSHOT -->
+  <!-- TAB 4: POLYGON.IO SNAPSHOT -->
   <div id="polygon" class="tab-content">
     <div class="key-bar">
-      <label for="polygon-key">Polygon.io API Key:</label>
-      <input type="text" id="polygon-key" placeholder="Enter Polygon.io API Key">
+      <label for="polygon-key">Polygon API Key:</label>
+      <input type="text" id="polygon-key" placeholder="Enter Polygon API Key">
       <button onclick="loadPolygon()">Fetch Data</button>
     </div>
     <div class="grid">
@@ -231,19 +248,19 @@
   </div>
 
   <script>
-    // Tab switching logic
-    function switchTab(tabId) {
+    // Tab Handler
+    function switchTab(evt, tabId) {
       document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
       document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
       
       document.getElementById(tabId).classList.add('active');
-      event.currentTarget.classList.add('active');
+      evt.currentTarget.classList.add('active');
     }
 
-    // Utility: Populate Tables
+    // Helper Table Builder
     function fillTable(tableId, data, tickerKey, priceKey, changeKey) {
       const table = document.getElementById(tableId);
-      table.innerHTML = `<tr><th>Ticker</th><th>Price</th><th>Change</th></tr>`; // Reset
+      table.innerHTML = `<tr><th>Ticker</th><th>Price</th><th>Change</th></tr>`;
       if (!data) return;
 
       data.slice(0, 10).forEach(item => {
@@ -260,7 +277,74 @@
       });
     }
 
-    // 2. Load FMP Data
+    // STRATEGY SCANNER ENGINE
+    async function runStrategyEngine() {
+      const key = document.getElementById('strat-key').value.trim();
+      if (!key) return alert('Please enter a Polygon API Key');
+
+      try {
+        const [gRes, lRes] = await Promise.all([
+          fetch(`https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/gainers?apiKey=${key}`),
+          fetch(`https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/losers?apiKey=${key}`)
+        ]);
+
+        const gData = await gRes.json();
+        const lData = await lRes.json();
+        const tickers = [...(gData.tickers || []), ...(lData.tickers || [])];
+
+        const buyTable = document.getElementById('strat-buys');
+        const shortTable = document.getElementById('strat-shorts');
+
+        buyTable.innerHTML = `<tr><th>Ticker</th><th>Price</th><th>Low</th><th>Bounce</th><th>Action</th></tr>`;
+        shortTable.innerHTML = `<tr><th>Ticker</th><th>Price</th><th>High</th><th>Pullback</th><th>Action</th></tr>`;
+
+        tickers.forEach(stock => {
+          const prevClose = stock.prevDay ? stock.prevDay.c : null;
+          const high = stock.day ? stock.day.h : null;
+          const low = stock.day ? stock.day.l : null;
+          const current = stock.min ? stock.min.c : (stock.day ? stock.day.c : null);
+
+          if (!prevClose || !high || !low || !current) return;
+
+          const maxGainPercent = ((high - prevClose) / prevClose) * 100;
+          const maxLossPercent = ((prevClose - low) / prevClose) * 100;
+          const dropFromHighPercent = ((high - current) / high) * 100;
+          const bounceFromLowPercent = ((current - low) / low) * 100;
+
+          // BUY RULE: Drop >=15%, Bounce >=7% off low
+          if (maxLossPercent >= 15 && bounceFromLowPercent >= 7) {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+              <td><strong>${stock.ticker}</strong></td>
+              <td>$${current.toFixed(2)}</td>
+              <td>$${low.toFixed(2)}</td>
+              <td class="green">+${bounceFromLowPercent.toFixed(2)}%</td>
+              <td class="yellow"><strong>BUY AT CLOSE</strong></td>
+            `;
+            buyTable.appendChild(row);
+          }
+
+          // SHORT RULE: Spike >=15%, Pullback >=7% off high
+          if (maxGainPercent >= 15 && dropFromHighPercent >= 7) {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+              <td><strong>${stock.ticker}</strong></td>
+              <td>$${current.toFixed(2)}</td>
+              <td>$${high.toFixed(2)}</td>
+              <td class="red">-${dropFromHighPercent.toFixed(2)}%</td>
+              <td class="yellow"><strong>SHORT AT CLOSE</strong></td>
+            `;
+            shortTable.appendChild(row);
+          }
+        });
+
+      } catch (err) {
+        alert('Strategy Engine Error. Check console/API Key.');
+        console.error(err);
+      }
+    }
+
+    // FMP Fetch
     async function loadFMP() {
       const key = document.getElementById('fmp-key').value.trim();
       try {
@@ -268,57 +352,35 @@
           fetch(`https://financialmodelingprep.com/api/v3/stock_market/gainers?apikey=${key}`),
           fetch(`https://financialmodelingprep.com/api/v3/stock_market/losers?apikey=${key}`)
         ]);
-        const gainers = await gRes.json();
-        const losers = await lRes.json();
-
-        fillTable('fmp-gainers', gainers, 'symbol', 'price', 'changesPercentage');
-        fillTable('fmp-losers', losers, 'symbol', 'price', 'changesPercentage');
-      } catch (err) {
-        alert('Error fetching FMP data. Check console.');
-        console.error(err);
-      }
+        fillTable('fmp-gainers', await gRes.json(), 'symbol', 'price', 'changesPercentage');
+        fillTable('fmp-losers', await lRes.json(), 'symbol', 'price', 'changesPercentage');
+      } catch (err) { alert('Error fetching FMP data.'); }
     }
 
-    // 3. Load Alpha Vantage Data
+    // Alpha Vantage Fetch
     async function loadAlphaVantage() {
       const key = document.getElementById('av-key').value.trim();
       try {
         const res = await fetch(`https://www.alphavantage.co/query?function=TOP_GAINERS_LOSERS&apikey=${key}`);
         const data = await res.json();
-
-        // Alpha Vantage provides change percentage as string like "5.2%"
-        const formatData = (list) => list.map(i => ({
-          ...i,
-          change_num: parseFloat(i.change_percentage.replace('%', ''))
-        }));
-
-        fillTable('av-gainers', formatData(data.top_gainers), 'ticker', 'price', 'change_num');
-        fillTable('av-losers', formatData(data.top_losers), 'ticker', 'price', 'change_num');
-      } catch (err) {
-        alert('Error fetching Alpha Vantage data. Check console.');
-        console.error(err);
-      }
+        const fmt = (list) => list.map(i => ({ ...i, change_num: parseFloat(i.change_percentage.replace('%', '')) }));
+        fillTable('av-gainers', fmt(data.top_gainers), 'ticker', 'price', 'change_num');
+        fillTable('av-losers', fmt(data.top_losers), 'ticker', 'price', 'change_num');
+      } catch (err) { alert('Error fetching Alpha Vantage data.'); }
     }
 
-    // 4. Load Polygon.io Data
+    // Polygon Snapshot Fetch
     async function loadPolygon() {
       const key = document.getElementById('polygon-key').value.trim();
-      if (!key) return alert('Please enter a Polygon API Key');
-      
+      if (!key) return alert('Enter Polygon Key');
       try {
         const [gRes, lRes] = await Promise.all([
           fetch(`https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/gainers?apiKey=${key}`),
           fetch(`https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/losers?apiKey=${key}`)
         ]);
-        const gainers = await gRes.json();
-        const losers = await lRes.json();
-
-        fillTable('poly-gainers', gainers.tickers, 'ticker', 'todaysChange', 'todaysChangePerc');
-        fillTable('poly-losers', losers.tickers, 'ticker', 'todaysChange', 'todaysChangePerc');
-      } catch (err) {
-        alert('Error fetching Polygon.io data. Check console.');
-        console.error(err);
-      }
+        fillTable('poly-gainers', (await gRes.json()).tickers, 'ticker', 'todaysChange', 'todaysChangePerc');
+        fillTable('poly-losers', (await lRes.json()).tickers, 'ticker', 'todaysChange', 'todaysChangePerc');
+      } catch (err) { alert('Error fetching Polygon data.'); }
     }
   </script>
 </body>
