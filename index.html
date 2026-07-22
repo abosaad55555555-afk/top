@@ -163,8 +163,8 @@
   <div id="strategy" class="tab-content active">
     <div class="strategy-rules">
       <strong>🎯 Strategy Setup & Exit Logic:</strong><br>
-      • <strong>Buy Signal (Loser Rebound):</strong> Intraday drop $\ge 15\%$ off Prev Close AND rebounds $\ge 7\%$ from Day Low.<br>
-      • <strong>Short Signal (Gainer Pullback):</strong> Intraday spike $\ge 15\%$ off Prev Close AND pulls back $\ge 7\%$ from Day High.<br>
+      • <strong>Buy Signal (Loser Rebound):</strong> Intraday drop ≥ 15% off Prev Close AND rebounds ≥ 7% from Day Low.<br>
+      • <strong>Short Signal (Gainer Pullback):</strong> Intraday spike ≥ 15% off Prev Close AND pulls back ≥ 7% from Day High.<br>
       • <strong>Exit Rules:</strong> Compare execution profits across <em>Market Close (4 PM)</em>, <em>After-Market</em>, or <em>Next Day's Open (9:30 AM)</em>.
     </div>
 
@@ -253,7 +253,6 @@
       document.getElementById('strat-shorts').innerHTML = `<tr><th>Ticker</th><th>Signal Price</th><th>High</th><th>Pullback %</th><th>Exit Plan</th></tr>`;
     }
 
-    // Proxy Fetch Engine
     async function fetchWithFallback(targetUrl) {
       const proxies = [
         `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
@@ -277,7 +276,6 @@
       throw new Error('All CORS proxies failed.');
     }
 
-    // --- 1. HISTORICAL BACKTEST ENGINE ---
     async function runBacktest() {
       const dateVal = document.getElementById('backtest-date').value;
       if (!dateVal) return alert('Please select a date first.');
@@ -321,14 +319,12 @@
               const dropFromHighPercent = ((high - close) / high) * 100;
               const bounceFromLowPercent = ((close - low) / low) * 100;
 
-              // BUY RULE: Drop >= 15%, Bounce >= 7% off low
               if (maxLossPercent >= 15 && bounceFromLowPercent >= 7) {
                 buyCount++;
                 const exitText = nextOpen ? `Next Open: $${nextOpen.toFixed(2)}` : 'Close / AH';
                 appendRow('strat-buys', ticker, close, low, `+${bounceFromLowPercent.toFixed(2)}%`, 'green', 'BUY AT CLOSE', exitText);
               }
 
-              // SHORT RULE: Spike >= 15%, Pullback >= 7% off high
               if (maxGainPercent >= 15 && dropFromHighPercent >= 7) {
                 shortCount++;
                 const exitText = nextOpen ? `Next Open: $${nextOpen.toFixed(2)}` : 'Close / AH';
@@ -344,7 +340,6 @@
       finishScanStatus(`Backtest Completed for ${dateVal}`, buyCount, shortCount);
     }
 
-    // --- 2. TODAY'S LIVE SCAN ENGINE ---
     async function runLiveScan() {
       const status = document.getElementById('status-text');
       status.innerHTML = `⌛ Running Live Scan for Today's Market Movers...`;
@@ -393,7 +388,7 @@
         finishScanStatus("Live Scan Completed", buyCount, shortCount);
 
       } catch (err) {
-        status.innerHTML = "⚠️ Primary scan endpoint busy. Running fallback scanner...";
+        status.innerHTML = "⚠ Primary scan endpoint busy. Running fallback scanner...";
         
         for (const ticker of highVolWatchlist.slice(0, 12)) {
           try {
