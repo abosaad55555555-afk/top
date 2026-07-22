@@ -107,9 +107,10 @@
     }
 
     th, td {
-      padding: 12px;
+      padding: 10px 12px;
       text-align: left;
       border-bottom: 1px solid #334155;
+      font-size: 0.88rem;
     }
 
     th { background: #182232; }
@@ -134,6 +135,15 @@
       line-height: 1.5;
       border-radius: 0 8px 8px 0;
     }
+
+    .exit-tag {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: bold;
+      background: #334155;
+    }
   </style>
 </head>
 <body>
@@ -152,12 +162,13 @@
   <!-- STRATEGY & BACKTEST TAB -->
   <div id="strategy" class="tab-content active">
     <div class="strategy-rules">
-      <strong>🎯 Strategy Setup Rules:</strong><br>
-      • <strong>Buy Signal (Loser Rebound):</strong> Intraday drop $\ge 15\%$ off Prev Close AND rebounds $\ge 7\%$ from Day Low $\rightarrow$ <em>BUY AT CLOSE</em><br>
-      • <strong>Short Signal (Gainer Pullback):</strong> Intraday spike $\ge 15\%$ off Prev Close AND pulls back $\ge 7\%$ from Day High $\rightarrow$ <em>SHORT AT CLOSE</em>
+      <strong>🎯 Strategy Setup & Exit Logic:</strong><br>
+      • <strong>Buy Signal (Loser Rebound):</strong> Intraday drop $\ge 15\%$ off Prev Close AND rebounds $\ge 7\%$ from Day Low.<br>
+      • <strong>Short Signal (Gainer Pullback):</strong> Intraday spike $\ge 15\%$ off Prev Close AND pulls back $\ge 7\%$ from Day High.<br>
+      • <strong>Exit Rules:</strong> Compare execution profits across <em>Market Close (4 PM)</em>, <em>After-Market</em>, or <em>Next Day's Open (9:30 AM)</em>.
     </div>
 
-    <!-- Date Picker & Mode Controls -->
+    <!-- Controls -->
     <div class="control-panel">
       <div class="control-group">
         <label for="backtest-date"><strong>📅 Target Backtest Date:</strong></label>
@@ -177,14 +188,14 @@
       <div>
         <h3 class="green">🟢 Buy Signals (Loser Rebound)</h3>
         <table id="strat-buys">
-          <tr><th>Ticker</th><th>Close Price</th><th>Day Low</th><th>Bounce %</th><th>Action</th></tr>
+          <tr><th>Ticker</th><th>Signal Price</th><th>Low</th><th>Bounce %</th><th>Exit Plan</th></tr>
           <tr><td colspan="5">No scan executed yet.</td></tr>
         </table>
       </div>
       <div>
         <h3 class="red">🔴 Short Signals (Gainer Pullback)</h3>
         <table id="strat-shorts">
-          <tr><th>Ticker</th><th>Price</th><th>Day High</th><th>Pullback %</th><th>Action</th></tr>
+          <tr><th>Ticker</th><th>Signal Price</th><th>High</th><th>Pullback %</th><th>Exit Plan</th></tr>
           <tr><td colspan="5">No scan executed yet.</td></tr>
         </table>
       </div>
@@ -238,11 +249,11 @@
     ];
 
     function resetTables() {
-      document.getElementById('strat-buys').innerHTML = `<tr><th>Ticker</th><th>Close Price</th><th>Day Low</th><th>Bounce %</th><th>Action</th></tr>`;
-      document.getElementById('strat-shorts').innerHTML = `<tr><th>Ticker</th><th>Price</th><th>Day High</th><th>Pullback %</th><th>Action</th></tr>`;
+      document.getElementById('strat-buys').innerHTML = `<tr><th>Ticker</th><th>Signal Price</th><th>Low</th><th>Bounce %</th><th>Exit Plan</th></tr>`;
+      document.getElementById('strat-shorts').innerHTML = `<tr><th>Ticker</th><th>Signal Price</th><th>High</th><th>Pullback %</th><th>Exit Plan</th></tr>`;
     }
 
-    // Robust fetch wrapper with automatic proxy fallbacks
+    // Proxy Fetch Engine
     async function fetchWithFallback(targetUrl) {
       const proxies = [
         `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
@@ -253,7 +264,6 @@
         try {
           const res = await fetch(proxy);
           if (!res.ok) continue;
-          
           if (proxy.includes('allorigins')) {
             const data = await res.json();
             return JSON.parse(data.contents);
@@ -261,10 +271,10 @@
             return await res.json();
           }
         } catch (e) {
-          console.warn(`Proxy failed, trying next: ${proxy}`);
+          console.warn(`Proxy failover triggered: ${proxy}`);
         }
       }
-      throw new Error('All CORS proxies failed to fetch data.');
+      throw new Error('All CORS proxies failed.');
     }
 
     // --- 1. HISTORICAL BACKTEST ENGINE ---
@@ -302,6 +312,7 @@
               const high = quote.high[i];
               const low = quote.low[i];
               const close = quote.close[i];
+              const nextOpen = quote.open[i + 1] || null;
 
               if (!prevClose || !high || !low || !close) continue;
 
@@ -310,14 +321,18 @@
               const dropFromHighPercent = ((high - close) / high) * 100;
               const bounceFromLowPercent = ((close - low) / low) * 100;
 
+              // BUY RULE: Drop >= 15%, Bounce >= 7% off low
               if (maxLossPercent >= 15 && bounceFromLowPercent >= 7) {
                 buyCount++;
-                appendRow('strat-buys', ticker, close, low, `+${bounceFromLowPercent.toFixed(2)}%`, 'green', 'BUY SIGNAL');
+                const exitText = nextOpen ? `Next Open: $${nextOpen.toFixed(2)}` : 'Close / AH';
+                appendRow('strat-buys', ticker, close, low, `+${bounceFromLowPercent.toFixed(2)}%`, 'green', 'BUY AT CLOSE', exitText);
               }
 
+              // SHORT RULE: Spike >= 15%, Pullback >= 7% off high
               if (maxGainPercent >= 15 && dropFromHighPercent >= 7) {
                 shortCount++;
-                appendRow('strat-shorts', ticker, close, high, `-${dropFromHighPercent.toFixed(2)}%`, 'red', 'SHORT SIGNAL');
+                const exitText = nextOpen ? `Next Open: $${nextOpen.toFixed(2)}` : 'Close / AH';
+                appendRow('strat-shorts', ticker, close, high, `-${dropFromHighPercent.toFixed(2)}%`, 'red', 'SHORT AT CLOSE', exitText);
               }
             }
           }
@@ -366,21 +381,20 @@
 
           if (maxLossPercent >= 15 && bounceFromLowPercent >= 7) {
             buyCount++;
-            appendRow('strat-buys', stock.symbol, current, low, `+${bounceFromLowPercent.toFixed(2)}%`, 'green', 'BUY AT CLOSE');
+            appendRow('strat-buys', stock.symbol, current, low, `+${bounceFromLowPercent.toFixed(2)}%`, 'green', 'BUY NEAR CLOSE', 'Exit: AH / Next Open');
           }
 
           if (maxGainPercent >= 15 && dropFromHighPercent >= 7) {
             shortCount++;
-            appendRow('strat-shorts', stock.symbol, current, high, `-${dropFromHighPercent.toFixed(2)}%`, 'red', 'SHORT AT CLOSE');
+            appendRow('strat-shorts', stock.symbol, current, high, `-${dropFromHighPercent.toFixed(2)}%`, 'red', 'SHORT NEAR CLOSE', 'Exit: AH / Next Open');
           }
         });
 
         finishScanStatus("Live Scan Completed", buyCount, shortCount);
 
       } catch (err) {
-        status.innerHTML = "⚠️ Primary scan endpoint busy. Falling back to high-volatility stock scan...";
+        status.innerHTML = "⚠️ Primary scan endpoint busy. Running fallback scanner...";
         
-        // Secondary Fallback Execution
         for (const ticker of highVolWatchlist.slice(0, 12)) {
           try {
             const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1m&range=1d`;
@@ -402,12 +416,12 @@
 
             if (maxLossPercent >= 15 && bounceFromLowPercent >= 7) {
               buyCount++;
-              appendRow('strat-buys', ticker, current, low, `+${bounceFromLowPercent.toFixed(2)}%`, 'green', 'BUY AT CLOSE');
+              appendRow('strat-buys', ticker, current, low, `+${bounceFromLowPercent.toFixed(2)}%`, 'green', 'BUY NEAR CLOSE', 'Exit: AH / Next Open');
             }
 
             if (maxGainPercent >= 15 && dropFromHighPercent >= 7) {
               shortCount++;
-              appendRow('strat-shorts', ticker, current, high, `-${dropFromHighPercent.toFixed(2)}%`, 'red', 'SHORT AT CLOSE');
+              appendRow('strat-shorts', ticker, current, high, `-${dropFromHighPercent.toFixed(2)}%`, 'red', 'SHORT NEAR CLOSE', 'Exit: AH / Next Open');
             }
           } catch(e) {}
         }
@@ -415,7 +429,7 @@
       }
     }
 
-    function appendRow(tableId, ticker, price, peakVal, percentVal, colorClass, actionText) {
+    function appendRow(tableId, ticker, price, peakVal, percentVal, colorClass, actionText, exitText) {
       const table = document.getElementById(tableId);
       const row = document.createElement('tr');
       row.innerHTML = `
@@ -423,7 +437,7 @@
         <td>$${price.toFixed(2)}</td>
         <td>$${peakVal.toFixed(2)}</td>
         <td class="${colorClass}">${percentVal}</td>
-        <td class="yellow"><strong>${actionText}</strong></td>
+        <td><strong class="yellow">${actionText}</strong><br><span class="exit-tag">${exitText}</span></td>
       `;
       table.appendChild(row);
     }
