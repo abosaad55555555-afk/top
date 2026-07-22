@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>US Market Strategy Scanner (No API Key Required)</title>
+  <title>US Market Strategy Scanner & Backtester</title>
   <style>
     :root {
       --bg-dark: #0f172a;
@@ -50,25 +50,47 @@
     .tab-content { display: none; max-width: 1200px; margin: 0 auto; }
     .tab-content.active { display: block; }
 
-    .status-bar {
+    .control-panel {
       background: var(--card-bg);
-      padding: 12px 20px;
+      padding: 16px 20px;
       border-radius: 8px;
       margin-bottom: 20px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 0.9rem;
+      flex-wrap: wrap;
+      gap: 15px;
     }
 
-    .status-bar button {
+    .control-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.95rem;
+    }
+
+    .control-group input[type="date"] {
+      background: #090d16;
+      border: 1px solid #334155;
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+
+    .btn {
       background: var(--accent);
       border: none;
-      padding: 8px 16px;
+      color: #000;
+      padding: 8px 18px;
       border-radius: 6px;
       cursor: pointer;
       font-weight: bold;
+      transition: opacity 0.2s;
     }
+
+    .btn:hover { opacity: 0.9; }
 
     .grid {
       display: grid;
@@ -106,58 +128,70 @@
     .strategy-rules {
       background: #182232;
       border-left: 4px solid var(--accent);
-      padding: 12px;
+      padding: 12px 16px;
       margin-bottom: 15px;
-      font-size: 0.85rem;
+      font-size: 0.88rem;
       line-height: 1.5;
+      border-radius: 0 8px 8px 0;
     }
   </style>
 </head>
 <body>
 
   <header>
-    <h1>📈 US Market Strategy Scanner</h1>
-    <p>Zero Setup • Live Market Signals • No API Keys Needed</p>
+    <h1>📈 Strategy Backtester & Live Scanner</h1>
+    <p>Reversion Strategy Engine • Backtest Previous Days or Scan Live Markets</p>
   </header>
 
   <!-- Navigation Tabs -->
   <div class="tabs">
-    <button class="tab-btn active" onclick="switchTab(event, 'strategy')">⚡ Strategy Signals Scanner</button>
+    <button class="tab-btn active" onclick="switchTab(event, 'strategy')">⚡ Strategy & Backtest Engine</button>
     <button class="tab-btn" onclick="switchTab(event, 'tradingview')">📈 Live Heatmap / Hotlists</button>
   </div>
 
-  <!-- TAB 0: FREE AUTOMATED STRATEGY SCANNER -->
+  <!-- STRATEGY & BACKTEST TAB -->
   <div id="strategy" class="tab-content active">
     <div class="strategy-rules">
-      <strong>🎯 Execution Logic:</strong><br>
-      • <strong>Buy Entry:</strong> Intraday drop $\ge 15\%$ AND bounces $\ge 7\%$ off Low $\rightarrow$ <em>BUY Near Close / After-Market</em><br>
-      • <strong>Short Entry:</strong> Intraday gain $\ge 15\%$ AND pulls back $\ge 7\%$ off High $\rightarrow$ <em>SHORT Near Close / After-Market</em>
+      <strong>🎯 Strategy Setup Rules:</strong><br>
+      • <strong>Buy Signal (Loser Rebound):</strong> Intraday drop $\ge 15\%$ off Prev Close AND rebounds $\ge 7\%$ from Day Low $\rightarrow$ <em>BUY AT CLOSE</em><br>
+      • <strong>Short Signal (Gainer Pullback):</strong> Intraday spike $\ge 15\%$ off Prev Close AND pulls back $\ge 7\%$ from Day High $\rightarrow$ <em>SHORT AT CLOSE</em>
     </div>
 
-    <div class="status-bar">
-      <span id="status-text">Status: Ready to scan...</span>
-      <button onclick="runZeroKeyScanner()">🔄 Refresh Scanner Now</button>
+    <!-- Date Picker & Mode Controls -->
+    <div class="control-panel">
+      <div class="control-group">
+        <label for="backtest-date"><strong>📅 Target Backtest Date:</strong></label>
+        <input type="date" id="backtest-date">
+        <button class="btn" onclick="runBacktest()">Run Backtest</button>
+      </div>
+      <div class="control-group">
+        <button class="btn" style="background:#4ade80;" onclick="runLiveScan()">⚡ Run Live Today's Scan</button>
+      </div>
+    </div>
+
+    <div style="margin-bottom: 15px; font-size: 0.95rem; font-weight: 500;" id="status-text">
+      Select a date above or click Live Scan to begin.
     </div>
 
     <div class="grid">
       <div>
         <h3 class="green">🟢 Buy Signals (Loser Rebound)</h3>
         <table id="strat-buys">
-          <tr><th>Ticker</th><th>Price</th><th>Low</th><th>Bounce</th><th>Action</th></tr>
-          <tr><td colspan="5">Scanning market for signals...</td></tr>
+          <tr><th>Ticker</th><th>Close Price</th><th>Day Low</th><th>Bounce %</th><th>Action</th></tr>
+          <tr><td colspan="5">No scan executed yet.</td></tr>
         </table>
       </div>
       <div>
         <h3 class="red">🔴 Short Signals (Gainer Pullback)</h3>
         <table id="strat-shorts">
-          <tr><th>Ticker</th><th>Price</th><th>High</th><th>Pullback</th><th>Action</th></tr>
-          <tr><td colspan="5">Scanning market for signals...</td></tr>
+          <tr><th>Ticker</th><th>Close Price</th><th>Day High</th><th>Pullback %</th><th>Action</th></tr>
+          <tr><td colspan="5">No scan executed yet.</td></tr>
         </table>
       </div>
     </div>
   </div>
 
-  <!-- TAB 1: TRADINGVIEW WIDGET -->
+  <!-- TRADINGVIEW WIDGET TAB -->
   <div id="tradingview" class="tab-content">
     <div class="widget-box">
       <div class="tradingview-widget-container">
@@ -180,6 +214,7 @@
   </div>
 
   <script>
+    // Tab switching
     function switchTab(evt, tabId) {
       document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
       document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
@@ -187,38 +222,129 @@
       evt.currentTarget.classList.add('active');
     }
 
-    // Keyless Strategy Engine using Public Market Data Proxy
-    async function runZeroKeyScanner() {
-      const statusText = document.getElementById('status-text');
-      statusText.innerText = "Status: Fetching live gainers & losers...";
+    // Set default date input to yesterday
+    window.addEventListener('DOMContentLoaded', () => {
+      const dateInput = document.getElementById('backtest-date');
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      
+      // Handle weekends for default selector
+      if (yesterday.getDay() === 0) yesterday.setDate(yesterday.getDate() - 2); // Sun -> Fri
+      if (yesterday.getDay() === 6) yesterday.setDate(yesterday.getDate() - 1); // Sat -> Fri
+      
+      dateInput.value = yesterday.toISOString().split('T')[0];
+      
+      // Auto run live scan on initial page load
+      runLiveScan();
+    });
 
-      const buyTable = document.getElementById('strat-buys');
-      const shortTable = document.getElementById('strat-shorts');
+    // High Volatility Universe for Scanning Backtests
+    const watchlist = [
+      "TSLA","NVDA","AMD","AAPL","AMZN","MSFT","META","GOOGL","NFLX","PLTR",
+      "COIN","MARA","RIOT","SOFI","UPST","PATH","RIVN","LCID","AFRM","CVNA",
+      "NIO","BABA","SMCI","DKNG","PYPL","RBLX","HOOD","ROKU","SNAP","SQ"
+    ];
 
-      buyTable.innerHTML = `<tr><th>Ticker</th><th>Price</th><th>Low</th><th>Bounce</th><th>Action</th></tr>`;
-      shortTable.innerHTML = `<tr><th>Ticker</th><th>Price</th><th>High</th><th>Pullback</th><th>Action</th></tr>`;
+    // Helper: Reset Tables
+    function resetTables() {
+      document.getElementById('strat-buys').innerHTML = `<tr><th>Ticker</th><th>Close Price</th><th>Day Low</th><th>Bounce %</th><th>Action</th></tr>`;
+      document.getElementById('strat-shorts').innerHTML = `<tr><th>Ticker</th><th>Close Price</th><th>Day High</th><th>Pullback %</th><th>Action</th></tr>`;
+    }
+
+    // --- 1. HISTORICAL BACKTEST ENGINE ---
+    async function runBacktest() {
+      const dateVal = document.getElementById('backtest-date').value;
+      if (!dateVal) return alert('Please select a date first.');
+
+      const status = document.getElementById('status-text');
+      status.innerHTML = `⌛ Backtesting strategy rules for date: <strong>${dateVal}</strong>...`;
+      resetTables();
+
+      const targetDate = new Date(dateVal);
+      // Get UNIX timestamps for start and end of target day
+      const startTime = Math.floor(targetDate.getTime() / 1000);
+      const endTime = startTime + 86400 * 5; // Fetch a small range to ensure historical candles exist
+
+      let buyCount = 0;
+      let shortCount = 0;
+
+      for (const ticker of watchlist) {
+        try {
+          const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(
+            `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&period1=${startTime}&period2=${endTime}`
+          )}`;
+
+          const res = await fetch(proxyUrl);
+          const data = await res.json();
+          const parsed = JSON.parse(data.contents);
+
+          const result = parsed?.chart?.result[0];
+          if (!result || !result.timestamp) continue;
+
+          const timestamps = result.timestamp;
+          const quote = result.indicators.quote[0];
+
+          // Find the candle corresponding to target date
+          for (let i = 1; i < timestamps.length; i++) {
+            const candleDate = new Date(timestamps[i] * 1000).toISOString().split('T')[0];
+
+            if (candleDate === dateVal) {
+              const prevClose = quote.close[i - 1];
+              const high = quote.high[i];
+              const low = quote.low[i];
+              const close = quote.close[i];
+
+              if (!prevClose || !high || !low || !close) continue;
+
+              const maxGainPercent = ((high - prevClose) / prevClose) * 100;
+              const maxLossPercent = ((prevClose - low) / prevClose) * 100;
+              const dropFromHighPercent = ((high - close) / high) * 100;
+              const bounceFromLowPercent = ((close - low) / low) * 100;
+
+              // BUY RULE: Drop >= 15%, Bounce >= 7% off low
+              if (maxLossPercent >= 15 && bounceFromLowPercent >= 7) {
+                buyCount++;
+                appendRow('strat-buys', ticker, close, low, `+${bounceFromLowPercent.toFixed(2)}%`, 'green', 'BUY SIGNAL');
+              }
+
+              // SHORT RULE: Spike >= 15%, Pullback >= 7% off high
+              if (maxGainPercent >= 15 && dropFromHighPercent >= 7) {
+                shortCount++;
+                appendRow('strat-shorts', ticker, close, high, `-${dropFromHighPercent.toFixed(2)}%`, 'red', 'SHORT SIGNAL');
+              }
+            }
+          }
+        } catch (e) {
+          console.error(`Error processing ${ticker}:`, e);
+        }
+      }
+
+      finishScanStatus(`Backtest Completed for ${dateVal}`, buyCount, shortCount);
+    }
+
+    // --- 2. TODAY'S LIVE SCAN ENGINE ---
+    async function runLiveScan() {
+      const status = document.getElementById('status-text');
+      status.innerHTML = `⌛ Running Live Scan for Today's Market Movers...`;
+      resetTables();
 
       try {
-        // Public endpoints via CORS proxy
-        const gainersUrl = `https://api.allorigins.win/get?url=${encodeURIComponent('https://query1.finance.yahoo.com/v1/test/get/quotes/v1/market/view?market=us&screener=DAY_GAINERS&count=25')}`;
-        const losersUrl = `https://api.allorigins.win/get?url=${encodeURIComponent('https://query1.finance.yahoo.com/v1/test/get/quotes/v1/market/view?market=us&screener=DAY_LOSERS&count=25')}`;
+        const gainersUrl = `https://api.allorigins.win/get?url=${encodeURIComponent('https://query1.finance.yahoo.com/v1/test/get/quotes/v1/market/view?market=us&screener=DAY_GAINERS&count=30')}`;
+        const losersUrl = `https://api.allorigins.win/get?url=${encodeURIComponent('https://query1.finance.yahoo.com/v1/test/get/quotes/v1/market/view?market=us&screener=DAY_LOSERS&count=30')}`;
 
         const [gRes, lRes] = await Promise.all([
-          fetch(gainersUrl).then(res => res.json()),
-          fetch(losersUrl).then(res => res.json())
+          fetch(gainersUrl).then(r => r.json()),
+          fetch(losersUrl).then(r => r.json())
         ]);
 
-        const gData = JSON.parse(gRes.contents);
-        const lData = JSON.parse(lRes.contents);
-
-        const gainersList = gData?.finance?.result[0]?.quotes || [];
-        const losersList = lData?.finance?.result[0]?.quotes || [];
-        const allTickers = [...gainersList, ...losersList];
+        const gList = JSON.parse(gRes.contents)?.finance?.result[0]?.quotes || [];
+        const lList = JSON.parse(lRes.contents)?.finance?.result[0]?.quotes || [];
+        const allStocks = [...gList, ...lList];
 
         let buyCount = 0;
         let shortCount = 0;
 
-        allTickers.forEach(stock => {
+        allStocks.forEach(stock => {
           const prevClose = stock.regularMarketPreviousClose;
           const high = stock.regularMarketDayHigh;
           const low = stock.regularMarketDayLow;
@@ -231,54 +357,53 @@
           const dropFromHighPercent = ((high - current) / high) * 100;
           const bounceFromLowPercent = ((current - low) / low) * 100;
 
-          // BUY RULE: Drop >=15%, Bounce >=7% off low
+          // BUY RULE
           if (maxLossPercent >= 15 && bounceFromLowPercent >= 7) {
             buyCount++;
-            const row = document.createElement('tr');
-            row.innerHTML = `
-              <td><strong>${stock.symbol}</strong></td>
-              <td>$${current.toFixed(2)}</td>
-              <td>$${low.toFixed(2)}</td>
-              <td class="green">+${bounceFromLowPercent.toFixed(2)}%</td>
-              <td class="yellow"><strong>BUY AT CLOSE</strong></td>
-            `;
-            buyTable.appendChild(row);
+            appendRow('strat-buys', stock.symbol, current, low, `+${bounceFromLowPercent.toFixed(2)}%`, 'green', 'BUY AT CLOSE');
           }
 
-          // SHORT RULE: Spike >=15%, Pullback >=7% off high
+          // SHORT RULE
           if (maxGainPercent >= 15 && dropFromHighPercent >= 7) {
             shortCount++;
-            const row = document.createElement('tr');
-            row.innerHTML = `
-              <td><strong>${stock.symbol}</strong></td>
-              <td>$${current.toFixed(2)}</td>
-              <td>$${high.toFixed(2)}</td>
-              <td class="red">-${dropFromHighPercent.toFixed(2)}%</td>
-              <td class="yellow"><strong>SHORT AT CLOSE</strong></td>
-            `;
-            shortTable.appendChild(row);
+            appendRow('strat-shorts', stock.symbol, current, high, `-${dropFromHighPercent.toFixed(2)}%`, 'red', 'SHORT AT CLOSE');
           }
         });
 
-        if (buyCount === 0) {
-          buyTable.innerHTML += `<tr><td colspan="5">No stocks meet the Buy criteria (+7% bounce from -15% drop) right now.</td></tr>`;
-        }
-        if (shortCount === 0) {
-          shortTable.innerHTML += `<tr><td colspan="5">No stocks meet the Short criteria (-7% pullback from +15% gain) right now.</td></tr>`;
-        }
-
-        statusText.innerText = `Status: Scan complete. Found ${buyCount} Buy signals & ${shortCount} Short signals.`;
+        finishScanStatus("Live Scan Completed", buyCount, shortCount);
 
       } catch (err) {
-        statusText.innerText = "Status: Error scanning data. Retrying...";
+        status.innerHTML = "❌ Error fetching live data. Please click 'Run Live Scan' to retry.";
         console.error(err);
       }
     }
 
-    // Auto-run when the webpage loads
-    window.onload = function() {
-      runZeroKeyScanner();
-    };
+    // Helper: Add Table Rows
+    function appendRow(tableId, ticker, price, peakVal, percentVal, colorClass, actionText) {
+      const table = document.getElementById(tableId);
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td><strong>${ticker}</strong></td>
+        <td>$${price.toFixed(2)}</td>
+        <td>$${peakVal.toFixed(2)}</td>
+        <td class="${colorClass}">${percentVal}</td>
+        <td class="yellow"><strong>${actionText}</strong></td>
+      `;
+      table.appendChild(row);
+    }
+
+    // Helper: Update Status Text
+    function finishScanStatus(modeText, buyCount, shortCount) {
+      const status = document.getElementById('status-text');
+      status.innerHTML = `✅ <strong>${modeText}:</strong> Found <span class="green"><strong>${buyCount} Buy signals</strong></span> and <span class="red"><strong>${shortCount} Short signals</strong></span>.`;
+
+      if (buyCount === 0) {
+        document.getElementById('strat-buys').innerHTML += `<tr><td colspan="5">No stocks met the Buy criteria on this date.</td></tr>`;
+      }
+      if (shortCount === 0) {
+        document.getElementById('strat-shorts').innerHTML += `<tr><td colspan="5">No stocks met the Short criteria on this date.</td></tr>`;
+      }
+    }
   </script>
 </body>
 </html>
