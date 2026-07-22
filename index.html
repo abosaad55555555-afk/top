@@ -184,7 +184,7 @@
       <div>
         <h3 class="red">🔴 Short Signals (Gainer Pullback)</h3>
         <table id="strat-shorts">
-          <tr><th>Ticker</th><th>Close Price</th><th>Day High</th><th>Pullback %</th><th>Action</th></tr>
+          <tr><th>Ticker</th><th>Price</th><th>Day High</th><th>Pullback %</th><th>Action</th></tr>
           <tr><td colspan="5">No scan executed yet.</td></tr>
         </table>
       </div>
@@ -214,7 +214,6 @@
   </div>
 
   <script>
-    // Tab switching
     function switchTab(evt, tabId) {
       document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
       document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
@@ -222,33 +221,50 @@
       evt.currentTarget.classList.add('active');
     }
 
-    // Set default date input to yesterday
     window.addEventListener('DOMContentLoaded', () => {
       const dateInput = document.getElementById('backtest-date');
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
-      
-      // Handle weekends for default selector
-      if (yesterday.getDay() === 0) yesterday.setDate(yesterday.getDate() - 2); // Sun -> Fri
-      if (yesterday.getDay() === 6) yesterday.setDate(yesterday.getDate() - 1); // Sat -> Fri
-      
+      if (yesterday.getDay() === 0) yesterday.setDate(yesterday.getDate() - 2);
+      if (yesterday.getDay() === 6) yesterday.setDate(yesterday.getDate() - 1);
       dateInput.value = yesterday.toISOString().split('T')[0];
-      
-      // Auto run live scan on initial page load
       runLiveScan();
     });
 
-    // High Volatility Universe for Scanning Backtests
-    const watchlist = [
+    const highVolWatchlist = [
       "TSLA","NVDA","AMD","AAPL","AMZN","MSFT","META","GOOGL","NFLX","PLTR",
       "COIN","MARA","RIOT","SOFI","UPST","PATH","RIVN","LCID","AFRM","CVNA",
       "NIO","BABA","SMCI","DKNG","PYPL","RBLX","HOOD","ROKU","SNAP","SQ"
     ];
 
-    // Helper: Reset Tables
     function resetTables() {
       document.getElementById('strat-buys').innerHTML = `<tr><th>Ticker</th><th>Close Price</th><th>Day Low</th><th>Bounce %</th><th>Action</th></tr>`;
-      document.getElementById('strat-shorts').innerHTML = `<tr><th>Ticker</th><th>Close Price</th><th>Day High</th><th>Pullback %</th><th>Action</th></tr>`;
+      document.getElementById('strat-shorts').innerHTML = `<tr><th>Ticker</th><th>Price</th><th>Day High</th><th>Pullback %</th><th>Action</th></tr>`;
+    }
+
+    // Robust fetch wrapper with automatic proxy fallbacks
+    async function fetchWithFallback(targetUrl) {
+      const proxies = [
+        `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+        `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`
+      ];
+
+      for (const proxy of proxies) {
+        try {
+          const res = await fetch(proxy);
+          if (!res.ok) continue;
+          
+          if (proxy.includes('allorigins')) {
+            const data = await res.json();
+            return JSON.parse(data.contents);
+          } else {
+            return await res.json();
+          }
+        } catch (e) {
+          console.warn(`Proxy failed, trying next: ${proxy}`);
+        }
+      }
+      throw new Error('All CORS proxies failed to fetch data.');
     }
 
     // --- 1. HISTORICAL BACKTEST ENGINE ---
@@ -261,22 +277,16 @@
       resetTables();
 
       const targetDate = new Date(dateVal);
-      // Get UNIX timestamps for start and end of target day
       const startTime = Math.floor(targetDate.getTime() / 1000);
-      const endTime = startTime + 86400 * 5; // Fetch a small range to ensure historical candles exist
+      const endTime = startTime + 86400 * 5;
 
       let buyCount = 0;
       let shortCount = 0;
 
-      for (const ticker of watchlist) {
+      for (const ticker of highVolWatchlist) {
         try {
-          const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(
-            `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&period1=${startTime}&period2=${endTime}`
-          )}`;
-
-          const res = await fetch(proxyUrl);
-          const data = await res.json();
-          const parsed = JSON.parse(data.contents);
+          const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&period1=${startTime}&period2=${endTime}`;
+          const parsed = await fetchWithFallback(targetUrl);
 
           const result = parsed?.chart?.result[0];
           if (!result || !result.timestamp) continue;
@@ -284,7 +294,6 @@
           const timestamps = result.timestamp;
           const quote = result.indicators.quote[0];
 
-          // Find the candle corresponding to target date
           for (let i = 1; i < timestamps.length; i++) {
             const candleDate = new Date(timestamps[i] * 1000).toISOString().split('T')[0];
 
@@ -301,13 +310,11 @@
               const dropFromHighPercent = ((high - close) / high) * 100;
               const bounceFromLowPercent = ((close - low) / low) * 100;
 
-              // BUY RULE: Drop >= 15%, Bounce >= 7% off low
               if (maxLossPercent >= 15 && bounceFromLowPercent >= 7) {
                 buyCount++;
                 appendRow('strat-buys', ticker, close, low, `+${bounceFromLowPercent.toFixed(2)}%`, 'green', 'BUY SIGNAL');
               }
 
-              // SHORT RULE: Spike >= 15%, Pullback >= 7% off high
               if (maxGainPercent >= 15 && dropFromHighPercent >= 7) {
                 shortCount++;
                 appendRow('strat-shorts', ticker, close, high, `-${dropFromHighPercent.toFixed(2)}%`, 'red', 'SHORT SIGNAL');
@@ -328,21 +335,21 @@
       status.innerHTML = `⌛ Running Live Scan for Today's Market Movers...`;
       resetTables();
 
-      try {
-        const gainersUrl = `https://api.allorigins.win/get?url=${encodeURIComponent('https://query1.finance.yahoo.com/v1/test/get/quotes/v1/market/view?market=us&screener=DAY_GAINERS&count=30')}`;
-        const losersUrl = `https://api.allorigins.win/get?url=${encodeURIComponent('https://query1.finance.yahoo.com/v1/test/get/quotes/v1/market/view?market=us&screener=DAY_LOSERS&count=30')}`;
+      let buyCount = 0;
+      let shortCount = 0;
 
-        const [gRes, lRes] = await Promise.all([
-          fetch(gainersUrl).then(r => r.json()),
-          fetch(losersUrl).then(r => r.json())
+      try {
+        const gainersUrl = 'https://query1.finance.yahoo.com/v1/test/get/quotes/v1/market/view?market=us&screener=DAY_GAINERS&count=30';
+        const losersUrl = 'https://query1.finance.yahoo.com/v1/test/get/quotes/v1/market/view?market=us&screener=DAY_LOSERS&count=30';
+
+        const [gData, lData] = await Promise.all([
+          fetchWithFallback(gainersUrl),
+          fetchWithFallback(losersUrl)
         ]);
 
-        const gList = JSON.parse(gRes.contents)?.finance?.result[0]?.quotes || [];
-        const lList = JSON.parse(lRes.contents)?.finance?.result[0]?.quotes || [];
+        const gList = gData?.finance?.result[0]?.quotes || [];
+        const lList = lData?.finance?.result[0]?.quotes || [];
         const allStocks = [...gList, ...lList];
-
-        let buyCount = 0;
-        let shortCount = 0;
 
         allStocks.forEach(stock => {
           const prevClose = stock.regularMarketPreviousClose;
@@ -357,13 +364,11 @@
           const dropFromHighPercent = ((high - current) / high) * 100;
           const bounceFromLowPercent = ((current - low) / low) * 100;
 
-          // BUY RULE
           if (maxLossPercent >= 15 && bounceFromLowPercent >= 7) {
             buyCount++;
             appendRow('strat-buys', stock.symbol, current, low, `+${bounceFromLowPercent.toFixed(2)}%`, 'green', 'BUY AT CLOSE');
           }
 
-          // SHORT RULE
           if (maxGainPercent >= 15 && dropFromHighPercent >= 7) {
             shortCount++;
             appendRow('strat-shorts', stock.symbol, current, high, `-${dropFromHighPercent.toFixed(2)}%`, 'red', 'SHORT AT CLOSE');
@@ -373,12 +378,43 @@
         finishScanStatus("Live Scan Completed", buyCount, shortCount);
 
       } catch (err) {
-        status.innerHTML = "❌ Error fetching live data. Please click 'Run Live Scan' to retry.";
-        console.error(err);
+        status.innerHTML = "⚠️ Primary scan endpoint busy. Falling back to high-volatility stock scan...";
+        
+        // Secondary Fallback Execution
+        for (const ticker of highVolWatchlist.slice(0, 12)) {
+          try {
+            const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1m&range=1d`;
+            const parsed = await fetchWithFallback(chartUrl);
+            const meta = parsed?.chart?.result[0]?.meta;
+            if (!meta) continue;
+
+            const prevClose = meta.chartPreviousClose;
+            const high = meta.dayHigh;
+            const low = meta.dayLow;
+            const current = meta.regularMarketPrice;
+
+            if (!prevClose || !high || !low || !current) continue;
+
+            const maxGainPercent = ((high - prevClose) / prevClose) * 100;
+            const maxLossPercent = ((prevClose - low) / prevClose) * 100;
+            const dropFromHighPercent = ((high - current) / high) * 100;
+            const bounceFromLowPercent = ((current - low) / low) * 100;
+
+            if (maxLossPercent >= 15 && bounceFromLowPercent >= 7) {
+              buyCount++;
+              appendRow('strat-buys', ticker, current, low, `+${bounceFromLowPercent.toFixed(2)}%`, 'green', 'BUY AT CLOSE');
+            }
+
+            if (maxGainPercent >= 15 && dropFromHighPercent >= 7) {
+              shortCount++;
+              appendRow('strat-shorts', ticker, current, high, `-${dropFromHighPercent.toFixed(2)}%`, 'red', 'SHORT AT CLOSE');
+            }
+          } catch(e) {}
+        }
+        finishScanStatus("Fallback Scan Completed", buyCount, shortCount);
       }
     }
 
-    // Helper: Add Table Rows
     function appendRow(tableId, ticker, price, peakVal, percentVal, colorClass, actionText) {
       const table = document.getElementById(tableId);
       const row = document.createElement('tr');
@@ -392,16 +428,15 @@
       table.appendChild(row);
     }
 
-    // Helper: Update Status Text
     function finishScanStatus(modeText, buyCount, shortCount) {
       const status = document.getElementById('status-text');
       status.innerHTML = `✅ <strong>${modeText}:</strong> Found <span class="green"><strong>${buyCount} Buy signals</strong></span> and <span class="red"><strong>${shortCount} Short signals</strong></span>.`;
 
       if (buyCount === 0) {
-        document.getElementById('strat-buys').innerHTML += `<tr><td colspan="5">No stocks met the Buy criteria on this date.</td></tr>`;
+        document.getElementById('strat-buys').innerHTML += `<tr><td colspan="5">No stocks met the Buy criteria (+7% bounce from -15% drop).</td></tr>`;
       }
       if (shortCount === 0) {
-        document.getElementById('strat-shorts').innerHTML += `<tr><td colspan="5">No stocks met the Short criteria on this date.</td></tr>`;
+        document.getElementById('strat-shorts').innerHTML += `<tr><td colspan="5">No stocks met the Short criteria (-7% pullback from +15% gain).</td></tr>`;
       }
     }
   </script>
